@@ -1,8 +1,6 @@
 #include <cstdint>
-#include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -10,24 +8,18 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-std::stringstream string_stream;
-
-void save_frame ( AVFrame* frame, const int& width, const int& height,
-                  const int& frame_index ) {
+void save_frame(AVFrame* frame, const int& width, const int& height,
+                  const int& frame_index) {
     std::cout << "Saving frame " << frame_index << " to disk ";
 
-    std::string file_name;
-
-    string_stream.clear();
-    string_stream << "frame" << frame_index << ".ppm";
-    string_stream >> file_name;
+    std::string file_name = "frame_"+std::to_string(frame_index)+".ppm";
 
     // Open file
     std::ofstream file(file_name, std::ios::out | std::ios::binary);
 
     // Write header
-    file << "P6" << std::endl << width << " "
-         << height << std::endl << 255 << std::endl;
+    file << "P6" << std::endl << width << " " << height << std::endl
+         << 255 << std::endl;
 
     // Write pixel data
     int num_data = width*3;
@@ -39,12 +31,16 @@ void save_frame ( AVFrame* frame, const int& width, const int& height,
     std::cout << "............................... [Done]" << std::endl;
 }
 
-int main ( int argc, char* argv[] ) {
-    if(argc < 2) {
-        std::cout << "Please provide a movie file" << std::endl;
-        return EXIT_FAILURE;
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cout << "usage: tutorial_01 input_file" << std::endl;
+
+        av_log(nullptr, AV_LOG_FATAL,
+               "\nAn input file must be specified\n");
+        return -1;
     }
 
+    // Register all formats and codecs
     av_register_all();
 
     AVFormatContext* format_context = nullptr;
@@ -52,22 +48,22 @@ int main ( int argc, char* argv[] ) {
     // Open video file
     if ( 0 != avformat_open_input ( &format_context, argv[1],
                                     nullptr, nullptr ) )
-        return EXIT_FAILURE; // Couldn't open file
+        return -1; // Couldn't open file
 
     // Retrieve stream information
     if ( avformat_find_stream_info(format_context, nullptr) < 0 )
-        return EXIT_FAILURE;
+        return -1;
 
     // Dump information about file onto standard error
     av_dump_format(format_context, 0, argv[1], 0);
-    
+
     std::cout << std::endl;
 
     // Find the first video stream
     int video_stream_index = av_find_best_stream(format_context,
                              AVMEDIA_TYPE_VIDEO, 0, 0, nullptr, 0);
     if (video_stream_index < 0)
-        return EXIT_FAILURE; // Didn't find a video stream
+        return -1; // Didn't find a video stream
 
     // Get a pointer to codec context for the video stream
     AVCodecContext* codec_context =
@@ -76,12 +72,13 @@ int main ( int argc, char* argv[] ) {
     // Find the decoder for the video stream
     AVCodec* codec = avcodec_find_decoder(codec_context->codec_id);
     if (nullptr == codec) {
-        std::cerr << "Unsupported codec!\n";
-        return EXIT_FAILURE; // Codec not found
+        av_log(nullptr, AV_LOG_FATAL, "Unsupported codec!\n");
+        return -1; // Codec not found
     }
+
     // Open codec
     if (avcodec_open2(codec_context, codec, nullptr) < 0)
-        return EXIT_FAILURE; // Could not open codec
+        return -1; // Could not open codec
 
     // Allocate video frame
     AVFrame* frame = av_frame_alloc();
@@ -89,7 +86,7 @@ int main ( int argc, char* argv[] ) {
     // Allocate an AVFrame structure
     AVFrame* rgb_frame = av_frame_alloc();
     if (nullptr == rgb_frame)
-        return EXIT_FAILURE;
+        return -1;
 
     int num_bytes = avpicture_get_size(AV_PIX_FMT_RGB24,
                                        codec_context->width,
@@ -97,8 +94,8 @@ int main ( int argc, char* argv[] ) {
     std::uint8_t* buffer =
         (std::uint8_t*)av_malloc(num_bytes*sizeof(std::uint8_t));
 
-    /* Assign appropriate parts of buffer to image planes in pFrameRGB
-    Note that pFrameRGB is an AVFrame, but AVFrame is a superset
+    /* Assign appropriate parts of buffer to image planes in rgb_frame
+    Note that rgb_frame is an AVFrame, but AVFrame is a superset
     of AVPicture */
     avpicture_fill((AVPicture*)(rgb_frame), buffer,AV_PIX_FMT_RGB24,
                    codec_context->width, codec_context->height);
@@ -114,7 +111,7 @@ int main ( int argc, char* argv[] ) {
                               nullptr,
                               nullptr);
 
-    int got_picture_pointer;
+    int got_picture_ptr;
     AVPacket packet;
 
     int i = 0;
@@ -123,10 +120,10 @@ int main ( int argc, char* argv[] ) {
         if (packet.stream_index == video_stream_index) {
             // Decode video frame
             avcodec_decode_video2(codec_context, frame,
-                                  &got_picture_pointer, &packet);
+                                  &got_picture_ptr, &packet);
 
             // Did we get a video frame?
-            if (got_picture_pointer != 0) {
+            if (got_picture_ptr != 0) {
                 if (++i > 5)
                     break;
 
@@ -150,12 +147,12 @@ int main ( int argc, char* argv[] ) {
     av_free(rgb_frame);
 
     // Free the YUV frame
-    av_free ( frame );
+    av_free(frame);
 
     // Close the codec
     avcodec_close(codec_context);
 
-    avformat_close_input ( &format_context );
+    avformat_close_input(&format_context);
     std::cout << std::endl << "All Done." << std::endl;
 }
 
