@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
     // Find the first video stream
     int video_stream_index = av_find_best_stream(format_context,
-                             AVMEDIA_TYPE_VIDEO, 0, 0, nullptr, 0);
+                             AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
     if (video_stream_index < 0)
         return -1; // Didn't find a video stream
 
@@ -96,11 +96,11 @@ int main(int argc, char* argv[]) {
 
     // Allocate video frame
     AVFrame* frame = av_frame_alloc();
-    
+
     int got_picture_ptr;
     AVPacket packet;
     SDL_Event event;
-    
+
     while (0 == av_read_frame(format_context, &packet)) {
         // Is this a packet from the video stream?
         if (packet.stream_index == video_stream_index) {
